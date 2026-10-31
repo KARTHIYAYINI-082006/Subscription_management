@@ -5,13 +5,14 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
-import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, LayoutDashboard, Lock, Mail, MailCheck, UserRound, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Briefcase, Check, Eye, EyeOff, LayoutDashboard, Lock, Mail, MailCheck, ShieldCheck, UserRound, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Logo } from '@/components/common';
 import { useAuth } from '@/context/AuthContext';
 import { api } from '@/lib/api';
 import { PASSWORD_RULES } from '@/lib/constants';
 import { cn, initials, titleCase } from '@/lib/utils';
+import type { Role } from '@/types';
 
 const email = z.string().trim().email('Enter a valid email address');
 export const strongPassword = z
@@ -99,14 +100,59 @@ const PrimarySubmit = ({ loading, children }: { loading: boolean; children: Reac
   </Button>
 );
 
-function GoogleButton() {
+/** Returns the selected role, or flags the role picker and returns null when none is chosen. */
+type RequireRole = () => Role | null;
+
+const ROLES: { value: Role; label: string; icon: LucideIcon }[] = [
+  { value: 'CUSTOMER', label: 'Customer', icon: UserRound },
+  { value: 'STAFF', label: 'Staff', icon: Briefcase },
+  { value: 'ADMIN', label: 'Admin', icon: ShieldCheck },
+];
+
+function RolePicker({ value, onChange, error }: { value: Role | null; onChange: (role: Role) => void; error: boolean }) {
+  return (
+    <div className="mb-5 space-y-1.5">
+      <p id="role-label" className="text-xs font-semibold text-ink">
+        Select your role
+      </p>
+      <div role="radiogroup" aria-labelledby="role-label" className="grid grid-cols-3 gap-2">
+        {ROLES.map(({ value: r, label, icon: Icon }) => {
+          const active = value === r;
+          return (
+            <button
+              key={r}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => onChange(r)}
+              className={cn(
+                'flex h-10 items-center justify-center gap-1.5 rounded-xl border text-xs font-semibold transition-all',
+                active
+                  ? 'border-brand-400 bg-brand-50 text-brand-700 ring-4 ring-brand-100'
+                  : cn('bg-white/80 text-ink-muted hover:border-brand-200 hover:text-ink', error ? 'border-rose-300' : 'border-line'),
+              )}
+            >
+              <Icon className="size-4" /> {label}
+            </button>
+          );
+        })}
+      </div>
+      {error && <p className="text-xs text-rose-600">Select your role to continue</p>}
+    </div>
+  );
+}
+
+function GoogleButton({ requireRole }: { requireRole: RequireRole }) {
   const { loginWithGoogle } = useAuth();
   const [loading, setLoading] = useState(false);
   const onClick = () => {
+    const role = requireRole();
+    if (!role) return;
     setLoading(true);
     run(async () => {
       try {
-        await loginWithGoogle();
+        const pending = await loginWithGoogle(role);
+        if (pending) toast.success(pending, { duration: 8000 });
       } catch (err) {
         const code = (err as { code?: string }).code;
         if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return;
@@ -134,19 +180,24 @@ const signupSchema = z
   .object({ name: z.string().trim().min(2, 'Enter your full name'), email, password: strongPassword, confirm: z.string() })
   .refine((v) => v.password === v.confirm, { message: 'Passwords do not match', path: ['confirm'] });
 
-const DEMO = [
-  { role: 'Admin', email: 'admin@subvio.com', password: 'Admin@1234' },
-  { role: 'Staff', email: 'staff@subvio.com', password: 'Staff@1234' },
-  { role: 'Customer', email: 'customer@subvio.com', password: 'Customer@1234' },
+/** Shared demo logins so visitors can explore each workspace. Clicking one fills the form and selects its role. */
+const DEMO: { label: string; role: Role; email: string; password: string }[] = [
+  { label: 'Admin', role: 'ADMIN', email: 'admin@subvio.com', password: 'Admin@1234' },
+  { label: 'Staff', role: 'STAFF', email: 'staff@subvio.com', password: 'Staff@1234' },
+  { label: 'Customer', role: 'CUSTOMER', email: 'customer@subvio.com', password: 'Customer@1234' },
 ];
 
-function LoginForm() {
+function LoginForm({ requireRole, onPickRole }: { requireRole: RequireRole; onPickRole: (role: Role) => void }) {
   const { login } = useAuth();
-  const { register, handleSubmit, setValue, formState } = useForm<z.infer<typeof loginSchema>>({ resolver: zodResolver(loginSchema) });
+  const { register, handleSubmit, setValue, clearErrors, formState } = useForm<z.infer<typeof loginSchema>>({ resolver: zodResolver(loginSchema) });
   const { errors, isSubmitting } = formState;
+  const onValid = (v: z.infer<typeof loginSchema>) => {
+    const role = requireRole();
+    if (role) return run(() => login(v.email, v.password, role));
+  };
   return (
     <>
-      <form onSubmit={handleSubmit((v) => run(() => login(v.email, v.password)))} className="space-y-4" noValidate>
+      <form onSubmit={handleSubmit(onValid, () => requireRole())} className="space-y-4" noValidate>
         <AuthField icon={Mail} label="Email" type="email" autoComplete="email" placeholder="you@company.com" error={errors.email?.message} {...register('email')} />
         <AuthField icon={Lock} label="Password" type="password" autoComplete="current-password" placeholder="••••••••" error={errors.password?.message} {...register('password')} />
         <div className="flex justify-end">
@@ -165,10 +216,12 @@ function LoginForm() {
             onClick={() => {
               setValue('email', d.email);
               setValue('password', d.password);
+              clearErrors();
+              onPickRole(d.role);
             }}
             className="rounded-full bg-brand-50 px-2.5 py-1 text-[11px] font-semibold text-brand-700 ring-1 ring-brand-100 transition-colors hover:bg-brand-100"
           >
-            {d.role}
+            {d.label}
           </button>
         ))}
       </div>
@@ -176,12 +229,23 @@ function LoginForm() {
   );
 }
 
-function SignupForm() {
+function SignupForm({ requireRole, onPending }: { requireRole: RequireRole; onPending: () => void }) {
   const { signup } = useAuth();
   const { register, handleSubmit, watch, formState } = useForm<z.infer<typeof signupSchema>>({ resolver: zodResolver(signupSchema) });
   const { errors, isSubmitting } = formState;
+  const onValid = (v: z.infer<typeof signupSchema>) => {
+    const role = requireRole();
+    if (!role) return;
+    return run(async () => {
+      const pending = await signup(v.name, v.email, v.password, role);
+      if (pending) {
+        toast.success(pending, { duration: 8000 });
+        onPending();
+      }
+    });
+  };
   return (
-    <form onSubmit={handleSubmit((v) => run(() => signup(v.name, v.email, v.password)))} className="space-y-4" noValidate>
+    <form onSubmit={handleSubmit(onValid, () => requireRole())} className="space-y-4" noValidate>
       <AuthField icon={UserRound} label="Full name" autoComplete="name" placeholder="Aarav Sharma" error={errors.name?.message} {...register('name')} />
       <AuthField icon={Mail} label="Email" type="email" autoComplete="email" placeholder="you@company.com" error={errors.email?.message} {...register('email')} />
       <AuthField icon={Lock} label="Password" type="password" autoComplete="new-password" placeholder="Create a strong password" error={errors.password?.message} {...register('password')}>
@@ -195,6 +259,17 @@ function SignupForm() {
 
 /** Login / sign-up panel embedded in the landing page. */
 export function AuthPanel({ mode, onModeChange }: { mode: AuthMode; onModeChange: (mode: AuthMode) => void }) {
+  const [role, setRole] = useState<Role | null>(null);
+  const [roleError, setRoleError] = useState(false);
+  const requireRole: RequireRole = () => {
+    if (!role) setRoleError(true);
+    return role;
+  };
+  const needsApproval = mode === 'signup' && (role === 'STAFF' || role === 'ADMIN');
+  const pickRole = (r: Role) => {
+    setRole(r);
+    setRoleError(false);
+  };
   return (
     <GlassPanel>
       <div className="relative mb-6 grid grid-cols-2 rounded-full bg-cloud p-1 ring-1 ring-line">
@@ -207,13 +282,19 @@ export function AuthPanel({ mode, onModeChange }: { mode: AuthMode; onModeChange
       </div>
       <h2 className="text-xl font-extrabold tracking-tight text-ink">{mode === 'login' ? 'Welcome back' : 'Create your account'}</h2>
       <p className="mb-6 mt-1 text-sm text-ink-muted">{mode === 'login' ? 'Log in to manage subscriptions and billing.' : 'See and manage your subscriptions in one place.'}</p>
+      <RolePicker value={role} error={roleError} onChange={pickRole} />
+      {needsApproval && role && (
+        <p className="-mt-2 mb-5 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-200">
+          {titleCase(role)} accounts must be approved by an existing admin before you can log in.
+        </p>
+      )}
       <motion.div key={mode} initial={{ opacity: 0, x: mode === 'login' ? -8 : 8 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.2 }}>
-        {mode === 'login' ? <LoginForm /> : <SignupForm />}
+        {mode === 'login' ? <LoginForm requireRole={requireRole} onPickRole={pickRole} /> : <SignupForm requireRole={requireRole} onPending={() => onModeChange('login')} />}
       </motion.div>
       <div className="my-5 flex items-center gap-3 text-[11px] uppercase tracking-widest text-ink-muted/70">
         <span className="h-px flex-1 bg-line" /> or <span className="h-px flex-1 bg-line" />
       </div>
-      <GoogleButton />
+      <GoogleButton requireRole={requireRole} />
     </GlassPanel>
   );
 }

@@ -15,7 +15,7 @@ export default function StaffPage() {
       resource="staff"
       title="Staff"
       singular="Staff member"
-      description="Team members who manage customers, subscriptions and billing. Only admins can add staff."
+      description="Team members who manage customers, subscriptions and billing. New Staff/Admin sign-ups appear here as Inactive: edit them and tick 'Account is active' to approve."
       searchPlaceholder="Search name or email…"
       canWrite
       canDelete={false}

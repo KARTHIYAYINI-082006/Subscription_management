@@ -1,16 +1,20 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, tokenStore } from '@/lib/api';
-import type { User } from '@/types';
+import type { Role, User } from '@/types';
+
+/** Auth endpoints either start a session (token) or report that the account awaits admin approval (message). */
+type AuthResponse = { token?: string; pending?: boolean; message?: string };
 
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
   isStaff: boolean;
   isAdmin: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  signup: (name: string, email: string, password: string) => Promise<void>;
-  loginWithGoogle: () => Promise<void>;
+  login: (email: string, password: string, role: Role) => Promise<void>;
+  /** Resolves to an approval message when the new account must be activated by an admin first. */
+  signup: (name: string, email: string, password: string, role: Role) => Promise<string | null>;
+  loginWithGoogle: (role: Role) => Promise<string | null>;
   logout: () => void;
   refresh: () => Promise<void>;
 }
@@ -40,11 +44,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const startSession = useCallback(
-    async (request: Promise<{ token: string }>) => {
-      const { token } = await request;
+    async (request: Promise<AuthResponse>) => {
+      const { token, message } = await request;
+      if (!token) return message ?? 'Your account is waiting for admin approval.';
       tokenStore.set(token);
       queryClient.clear();
       await refresh();
+      return null;
     },
     [queryClient, refresh],
   );
@@ -55,11 +61,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       isStaff: user?.role === 'ADMIN' || user?.role === 'STAFF',
       isAdmin: user?.role === 'ADMIN',
-      login: (email, password) => startSession(api.post('/auth/login', { email, password })),
-      signup: (name, email, password) => startSession(api.post('/auth/signup', { name, email, password })),
-      loginWithGoogle: async () => {
+      login: async (email, password, role) => {
+        await startSession(api.post('/auth/login', { email, password, role }));
+      },
+      signup: (name, email, password, role) => startSession(api.post('/auth/signup', { name, email, password, role })),
+      loginWithGoogle: async (role) => {
         const { googleIdToken } = await import('@/lib/firebase');
-        await startSession(api.post('/auth/google', { idToken: await googleIdToken() }));
+        return startSession(api.post('/auth/google', { idToken: await googleIdToken(), role }));
       },
       logout: () => {
         tokenStore.clear();

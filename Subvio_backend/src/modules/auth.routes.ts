@@ -41,6 +41,25 @@ async function session(userId: string) {
 }
 
 const email = z.string().trim().toLowerCase().email('Enter a valid email address');
+const role = z.enum(['CUSTOMER', 'STAFF', 'ADMIN'], { message: 'Select your role' });
+type SelectedRole = z.infer<typeof role>;
+const roleLabel = (r: SelectedRole) => r.charAt(0) + r.slice(1).toLowerCase();
+
+/** Staff and admin sign-ups stay inactive until an existing admin approves them on the Staff page. */
+const pendingResponse = (r: SelectedRole) => ({
+  pending: true,
+  message: `Your ${roleLabel(r)} account has been created and is waiting for admin approval. You can log in once an admin activates it.`,
+});
+
+function assertRole(user: { role: SelectedRole; isActive: boolean }, selected: SelectedRole) {
+  if (user.role !== selected) {
+    throw new HttpError(401, `This account is not registered as ${roleLabel(selected)}. Select the correct role and try again.`);
+  }
+  if (!user.isActive) {
+    throw new HttpError(403, 'Your account is not active yet. An admin must approve or re-activate it before you can log in.');
+  }
+}
+
 const firebaseKeys = createRemoteJWKSet(
   new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com'),
 );
@@ -48,25 +67,27 @@ const firebaseKeys = createRemoteJWKSet(
 const router = Router();
 
 router.post('/signup', async (req, res) => {
-  const data = z.object({ name: z.string().trim().min(2, 'Name is required'), email, password }).parse(req.body);
+  const data = z.object({ name: z.string().trim().min(2, 'Name is required'), email, password, role }).parse(req.body);
+  const isCustomer = data.role === 'CUSTOMER';
   const user = await prisma.user.create({
-    data: { name: data.name, email: data.email, passwordHash: await hashPassword(data.password), role: 'CUSTOMER' },
+    data: { name: data.name, email: data.email, passwordHash: await hashPassword(data.password), role: data.role, isActive: isCustomer },
   });
+  if (!isCustomer) return void res.status(202).json(pendingResponse(data.role));
   res.status(201).json(await session(user.id));
 });
 
 router.post('/login', async (req, res) => {
-  const data = z.object({ email, password: z.string().min(1, 'Password is required') }).parse(req.body);
+  const data = z.object({ email, password: z.string().min(1, 'Password is required'), role }).parse(req.body);
   const user = await prisma.user.findUnique({ where: { email: data.email } });
   if (!user?.passwordHash || !(await bcrypt.compare(data.password, user.passwordHash))) {
     throw new HttpError(401, 'Invalid email or password');
   }
-  if (!user.isActive) throw new HttpError(403, 'Your account has been deactivated. Contact the administrator.');
+  assertRole(user, data.role);
   res.json(await session(user.id));
 });
 
 router.post('/google', async (req, res) => {
-  const { idToken } = z.object({ idToken: z.string().min(1) }).parse(req.body);
+  const { idToken, role: selected } = z.object({ idToken: z.string().min(1), role }).parse(req.body);
   let payload;
   try {
     ({ payload } = await jwtVerify(idToken, firebaseKeys, {
@@ -79,13 +100,17 @@ router.post('/google', async (req, res) => {
   const googleEmail = String(payload.email ?? '').toLowerCase();
   if (!googleEmail || !payload.email_verified) throw new HttpError(401, 'Google account email is not verified');
 
-  const user =
-    (await prisma.user.findUnique({ where: { email: googleEmail } })) ??
-    (await prisma.user.create({
-      data: { email: googleEmail, name: String(payload.name ?? googleEmail.split('@')[0]), role: 'CUSTOMER' },
-    }));
-  if (!user.isActive) throw new HttpError(403, 'Your account has been deactivated. Contact the administrator.');
-  res.json(await session(user.id));
+  const existing = await prisma.user.findUnique({ where: { email: googleEmail } });
+  if (!existing) {
+    const isCustomer = selected === 'CUSTOMER';
+    const user = await prisma.user.create({
+      data: { email: googleEmail, name: String(payload.name ?? googleEmail.split('@')[0]), role: selected, isActive: isCustomer },
+    });
+    if (!isCustomer) return void res.status(202).json(pendingResponse(selected));
+    return void res.status(201).json(await session(user.id));
+  }
+  assertRole(existing, selected);
+  res.json(await session(existing.id));
 });
 
 router.post('/forgot-password', async (req, res) => {

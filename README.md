@@ -90,7 +90,7 @@ npm run dev                 # http://localhost:5173
 | Staff | staff@subvio.com | Staff@1234 |
 | Customer | customer@subvio.com | Customer@1234 |
 
-The login page has one-click buttons that fill in these accounts. The seed creates 26 customers, 11 products, 6 plans, 5 templates, 6 discounts, 31 subscriptions, and invoices and payments produced by the real billing engine.
+On the login page, the **Try a demo** buttons fill in these accounts and select their role. Otherwise, select the matching role (Customer, Staff or Admin) before logging in. The email, password and role must all match. Customer sign-ups can log in straight away; Staff and Admin sign-ups stay inactive until an existing admin approves them on the **Staff** page. The seed creates 26 customers, 11 products, 6 plans, 5 templates, 6 discounts, 31 subscriptions, and invoices and payments produced by the real billing engine.
 
 ## Environment variables
 
