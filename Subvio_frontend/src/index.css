@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    @apply h-full;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-cloud font-sans text-sm text-ink antialiased;
+  }
+  ::selection {
+    @apply bg-brand-100 text-brand-700;
+  }
+  input[type='checkbox'] {
+    accent-color: #7c3aed;
+  }
+}
+
+@layer components {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #dcd8e8 transparent;
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  /* Soft multi-colour mesh used behind the landing and auth screens. */
+  .mesh {
+    background:
+      radial-gradient(45% 40% at 10% 10%, rgba(196, 181, 253, 0.55) 0%, transparent 70%),
+      radial-gradient(40% 35% at 90% 5%, rgba(244, 114, 182, 0.28) 0%, transparent 70%),
+      radial-gradient(50% 40% at 70% 90%, rgba(251, 191, 36, 0.16) 0%, transparent 70%),
+      #fbfaff;
+  }
+  /* Fine grid that fades out towards the edges. */
+  .grid-lines {
+    background-image: linear-gradient(rgba(124, 58, 237, 0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(124, 58, 237, 0.07) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 30%, transparent 75%);
+  }
+  /* Vivid brand banner used for hero cards inside the app. */
+  .hero-gradient {
+    background:
+      radial-gradient(60% 80% at 100% 0%, rgba(244, 114, 182, 0.45) 0%, transparent 60%),
+      radial-gradient(50% 70% at 0% 100%, rgba(167, 139, 250, 0.5) 0%, transparent 60%),
+      linear-gradient(135deg, #6d28d9 0%, #7c3aed 45%, #a855f7 100%);
+  }
+  /* Soft light backdrop for the app canvas. */
+  .canvas {
+    background:
+      radial-gradient(40% 30% at 100% 0%, rgba(196, 181, 253, 0.22) 0%, transparent 70%),
+      radial-gradient(30% 25% at 0% 0%, rgba(244, 114, 182, 0.08) 0%, transparent 70%),
+      #f8f7fc;
+  }
+  .text-gradient {
+    @apply bg-gradient-to-r from-brand-600 via-fuchsia-500 to-amber-500 bg-clip-text text-transparent;
+    background-size: 200% auto;
+  }
+  .glass {
+    @apply border border-white/70 bg-white/70 backdrop-blur-xl;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media print {
+  body {
+    @apply bg-white;
+  }
+  @page {
+    margin: 12mm;
+  }
+}
