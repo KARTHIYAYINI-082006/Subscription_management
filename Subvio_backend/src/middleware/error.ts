@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { ZodError } from 'zod';
 import { HttpError } from '../lib/http';
+import { isConnectionError } from '../lib/prisma';
 
 export function notFoundHandler(_req: Request, res: Response) {
   res.status(404).json({ message: 'Route not found' });
@@ -34,6 +35,11 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
       return res.status(409).json({ message: 'This record is in use by other records and cannot be deleted' });
     }
     if (/code: "23505"/.test(err.message)) return res.status(409).json({ message: 'A record with this value already exists' });
+  }
+
+  if (isConnectionError(err)) {
+    console.warn(`Database unreachable: ${(err as Error).message.split('\n').filter(Boolean).pop()}`);
+    return res.status(503).json({ message: 'The database is temporarily unreachable. Please try again in a moment.' });
   }
 
   console.error(err);
