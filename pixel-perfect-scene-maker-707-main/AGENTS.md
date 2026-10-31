@@ -1,0 +1,2 @@
+- Frontend-only for now: all data comes from `src/lib/mock-data.ts` through `src/services/api.ts`, which will later point at a Node/Express + MongoDB API — don't add Supabase/Cloud.
+- Role workspaces live under the dynamic `/$role` routes; menus come from `src/lib/nav.ts` and module tables from `src/components/app/modules.tsx` config, so new modules are added as config, not new page files.
